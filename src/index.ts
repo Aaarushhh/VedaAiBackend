@@ -6,17 +6,43 @@ import connectDB from './config/db';
 import { initSocket } from './socket/index';
 import { startWorker } from './workers/questionWorker';
 import assignmentRoutes from './routes/assignment';
+import { isOriginAllowed } from './config/cors';
 
 dotenv.config();
+
+const requiredEnv = ['MONGODB_URI', 'REDIS_URL', 'GEMINI_API_KEY'] as const;
+for (const key of requiredEnv) {
+  const value = process.env[key]?.trim();
+  if (!value) {
+    console.error(`Missing required env: ${key}`);
+    process.exit(1);
+  }
+}
+
+const mongoUri = process.env.MONGODB_URI!.trim();
+if (!/^mongodb(\+srv)?:\/\//.test(mongoUri)) {
+  console.error(
+    'MONGODB_URI must start with mongodb:// or mongodb+srv:// (no quotes, no spaces)'
+  );
+  process.exit(1);
+}
 
 const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 // Routes
